@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:BootMenuHooker"
         mc:Ignorable="d"
         Title="Boot Menu Hook Tool" Height="300" Width="320"
+        ResizeMode="NoResize"
         Icon="/BootMenuHooker;component/Resources/icon.png" >
     <DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center">
