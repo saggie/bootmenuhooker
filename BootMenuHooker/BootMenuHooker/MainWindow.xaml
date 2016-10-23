@@ -5,7 +5,8 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BootMenuHooker"
         mc:Ignorable="d"
-        Title="BootMenuHooker" Height="300" Width="320">
+        Title="Boot Menu Hook Tool" Height="300" Width="320"
+        Icon="/BootMenuHooker;component/Resources/icon.png" >
     <DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center">
             <Button x:Name="startButton" Content="⏵ Start" Width="100" Margin="5" HorizontalAlignment="Center" Click="startButton_Click"/>
