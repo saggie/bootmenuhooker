@@ -1,51 +1,52 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Forms;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace BootMenuHooker
 {
     public partial class MainWindow : Window
     {
-        [DllImport("user32.dll")]
-        public static extern IntPtr PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+        #region Members
+
         private const uint WM_KEYDOWN = 0x100;
-        private const uint WM_KEYUP   = 0x101;
+        private const uint WM_KEYUP = 0x101;
+
+        private const int PID_UNSELECTED = -1;
+        private const ConsoleKey CONSOLEKEY_UNSELECTED = ConsoleKey.NoName;
+        private const string SENDKEY_UNELECTED = "__NOT_SELECTED__";
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-        private IList<TargetWindowCandidate> targetWindowCandidateList = new List<TargetWindowCandidate> { };
-        private IList<string> targetKeyCandidateList = new List<string>
+        private readonly IList<string> targetKeyCandidateList = new List<string>
             {
                 "Escape", "Delete",
                 "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-                "Ctrl-A", "Ctrl-B", "Ctrl-C", "Ctrl-D", "Ctrl-E", "Ctrl-F", "Ctrl-G", "Ctrl-H",
-                "Ctrl-I", "Ctrl-J", "Ctrl-K", "Ctrl-L", "Ctrl-M", "Ctrl-N", "Ctrl-O", "Ctrl-P", "Ctrl-Q",
-                "Ctrl-R", "Ctrl-S", "Ctrl-T", "Ctrl-U", "Ctrl-V", "Ctrl-W", "Ctrl-X", "Ctrl-Y", "Ctrl-Z",
+                "Ctrl+A", "Ctrl+B", "Ctrl+C", "Ctrl+D", "Ctrl+E", "Ctrl+F", "Ctrl+G", "Ctrl+H",
+                "Ctrl+I", "Ctrl+J", "Ctrl+K", "Ctrl+L", "Ctrl+M", "Ctrl+N", "Ctrl+O", "Ctrl+P", "Ctrl+Q",
+                "Ctrl+R", "Ctrl+S", "Ctrl+T", "Ctrl+U", "Ctrl+V", "Ctrl+W", "Ctrl+X", "Ctrl+Y", "Ctrl+Z",
             };
 
-        private int targetPid = -1;
-        private ConsoleKey targetConsoleKey = ConsoleKey.NoName;
-        private string targetSendKey = "";
+        private int targetPid = PID_UNSELECTED;
+        private ConsoleKey targetConsoleKey = CONSOLEKEY_UNSELECTED;
+        private string targetSendKey = SENDKEY_UNELECTED;
+
+        private bool foregroundMode = false;
+        private bool isExecuting = false;
         private bool isControlKeyNeeded = false;
 
-        private bool isRunning = false;
-        private bool foregroundMode = false;
+        #endregion
+
+        #region Initialization or Update for UI Component
 
         public MainWindow()
         {
@@ -53,7 +54,24 @@ namespace BootMenuHooker
 
             RefreshTargetWindowSelector();
             InitializeTargetKeySelector();
-            UpdateIsEnabledStatus();
+
+            UpdateUiComponentStatus();
+        }
+
+        private void RefreshTargetWindowSelector()
+        {
+            Process[] allCurrentProcesses = Process.GetProcesses();
+
+            targetWindowSelector.Items.Clear();
+            foreach (var eachProcess in allCurrentProcesses)
+            {
+                // Filtering out non-title processes
+                if (string.IsNullOrEmpty(eachProcess.MainWindowTitle)) { continue; }
+
+                targetWindowSelector.Items.Add(
+                    convertProcessInformationIntoString(eachProcess.Id, eachProcess.ProcessName, eachProcess.MainWindowTitle)
+                );
+            }
         }
 
         private void InitializeTargetKeySelector()
@@ -64,89 +82,82 @@ namespace BootMenuHooker
             }
         }
 
-        private void refreshButton_Click(object sender, RoutedEventArgs e)
+        private void UpdateUiComponentStatus()
         {
-            RefreshTargetWindowSelector();
-        }
-
-        private void startButton_Click(object sender, RoutedEventArgs e)
-        {
-            isRunning = true;
-            UpdateIsEnabledStatus();
-
-            PressKey();
-        }
-
-        private void stopButton_Click(object sender, RoutedEventArgs e)
-        {
-            isRunning = false;
-            UpdateIsEnabledStatus();
-        }
-
-        private void UpdateIsEnabledStatus()
-        {
-            if (isRunning) {
+            if (isExecuting) {
                 startButton.IsEnabled = false;
                 stopButton.IsEnabled = true;
 
                 targetWindowLabel.IsEnabled = false;
                 targetWindowSelector.IsEnabled = false;
+                refreshButton.IsEnabled = false;
                 targetKeyLabel.IsEnabled = false;
                 targetKeySelector.IsEnabled = false;
-                refreshButton.IsEnabled = false;
-                forceForegroundCheckBox.IsEnabled = false;
-                forceForegroundLabel.IsEnabled = false;
+                backgroundRadioButton.IsEnabled = false;
+                foregroundRadioButton.IsEnabled = false;
+                forceForegroundNote.IsEnabled = false;
             } else {
-                startButton.IsEnabled = IsReady() ? true : false;
+                startButton.IsEnabled = IsExecutionReady() ? true : false;
                 stopButton.IsEnabled = false;
 
                 targetWindowLabel.IsEnabled = true;
                 targetWindowSelector.IsEnabled = true;
+                refreshButton.IsEnabled = true;
                 targetKeyLabel.IsEnabled = true;
                 targetKeySelector.IsEnabled = true;
-                refreshButton.IsEnabled = true;
-                forceForegroundCheckBox.IsEnabled = isControlKeyNeeded ? false : true;
-                forceForegroundLabel.IsEnabled = true;
+                backgroundRadioButton.IsEnabled = isControlKeyNeeded ? false : true;
+                foregroundRadioButton.IsEnabled = isControlKeyNeeded ? false : true;
+                forceForegroundNote.IsEnabled = true;
             }
         }
 
-        private bool IsReady() {
-            return targetPid != -1 && (targetConsoleKey != ConsoleKey.NoName || targetSendKey != "");
-        }
+        #endregion
 
-        private void PressKey()
+        #region Execution
+
+        private bool IsExecutionReady()
         {
-            var hWnd = Process.GetProcessById(targetPid).MainWindowHandle;
-
-            if (foregroundMode)
-            {
-                SetForegroundWindow(hWnd);
-                Thread.Sleep(100); // needed for window-switching time
-                SendKeys.SendWait(targetSendKey);
-            }
-            else
-            {
-                PostMessage(hWnd, WM_KEYDOWN, (IntPtr)targetConsoleKey, IntPtr.Zero);
-            }
+            return targetPid != PID_UNSELECTED &&
+                (targetConsoleKey != CONSOLEKEY_UNSELECTED || targetSendKey != SENDKEY_UNELECTED);
         }
 
-        private void RefreshTargetWindowSelector()
+        private void Execute()
         {
-            Process[] currentProcesses = Process.GetProcesses();
+            Task infiniteTask = Task.Factory.StartNew(() => {
+                while (true)
+                {
+                    var hWnd = Process.GetProcessById(targetPid).MainWindowHandle;
 
-            targetWindowCandidateList.Clear();
-            foreach (var process in currentProcesses)
-            {
-                if (string.IsNullOrEmpty(process.MainWindowTitle)) { continue; }
-                targetWindowCandidateList.Add(new TargetWindowCandidate(process.Id, process.ProcessName, process.MainWindowTitle));
-            }
+                    if (foregroundMode)
+                    {
+                        pressKeyInForegroundMode(hWnd);
+                    }
+                    else
+                    {
+                        pressKeyInBackgroundMode(hWnd);
+                    }
 
-            // Update ComboBox Items
-            targetWindowSelector.Items.Clear();
-            foreach (var eachItem in targetWindowCandidateList) {
-                targetWindowSelector.Items.Add(eachItem.toString());
-            }
+                    if (!isExecuting) { break; }
+                    Thread.Sleep(1000);
+                }
+            });
         }
+
+        private void pressKeyInForegroundMode(IntPtr hWnd)
+        {
+            SetForegroundWindow(hWnd);
+            Thread.Sleep(100); // needed for window-switching time
+            SendKeys.SendWait(targetSendKey);
+        }
+
+        private void pressKeyInBackgroundMode(IntPtr hWnd)
+        {
+            PostMessage(hWnd, WM_KEYDOWN, (IntPtr)targetConsoleKey, IntPtr.Zero);
+        }
+
+        #endregion
+
+        #region Event Haldlers
 
         private void targetWindowSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
@@ -154,10 +165,51 @@ namespace BootMenuHooker
             if (selectedWindow != null) {
                 setTargetPidBySelectedItem(selectedWindow.ToString());
             }
-            else { targetPid = -1; }
+            else { targetPid = PID_UNSELECTED; } // case: after refreshed
             
-            UpdateIsEnabledStatus();
+            UpdateUiComponentStatus();
         }
+
+        private void refreshButton_Click(object sender, RoutedEventArgs e)
+        {
+            RefreshTargetWindowSelector();
+        }
+
+        private void targetKeySelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            setTargetKeyBySelectedItem();
+            UpdateUiComponentStatus();
+        }
+
+        private void backgroundRadioButton_Checked(object sender, RoutedEventArgs e)
+        {
+            foregroundMode = false;
+            setTargetKeyBySelectedItem();
+        }
+
+        private void foregroundRadioButton_Checked(object sender, RoutedEventArgs e)
+        {
+            foregroundMode = true;
+            setTargetKeyBySelectedItem();
+        }
+
+        private void startButton_Click(object sender, RoutedEventArgs e)
+        {
+            isExecuting = true;
+            UpdateUiComponentStatus();
+
+            Execute();
+        }
+
+        private void stopButton_Click(object sender, RoutedEventArgs e)
+        {
+            isExecuting = false;
+            UpdateUiComponentStatus();
+        }
+
+        #endregion
+
+        #region Helper for Target Window
 
         private void setTargetPidBySelectedItem(string selectedItem)
         {
@@ -166,32 +218,25 @@ namespace BootMenuHooker
             targetPid = int.Parse(pid);
         }
 
-        private void targetKeySelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private string convertProcessInformationIntoString(int pid, string name, string title)
         {
-            setTargetKeyFromSelectedItem();
-            UpdateIsEnabledStatus();
+            return title + " (" + name + ") [" + pid + "]";
         }
 
-        private void forceForegroundCheckBox_Checked(object sender, RoutedEventArgs e)
-        {
-            foregroundMode = true;
-            setTargetKeyFromSelectedItem();
-        }
+        #endregion
 
-        private void forceForegroundCheckBox_Unchecked(object sender, RoutedEventArgs e)
-        {
-            foregroundMode = false;
-            setTargetKeyFromSelectedItem();
-        }
+        #region Helper for Target Key
 
-        private void setTargetKeyFromSelectedItem() {
+        private void setTargetKeyBySelectedItem() {
+
+            if (targetKeySelector.SelectedItem == null) { return; } // case: not selected yet
 
             string selectedItem = targetKeySelector.SelectedItem.ToString();
 
             if (selectedItem.Contains("Ctrl"))
             {
                 foregroundMode = true;
-                forceForegroundCheckBox.IsChecked = true;
+                foregroundRadioButton.IsChecked = true;
                 isControlKeyNeeded = true;
             }
             else
@@ -218,7 +263,8 @@ namespace BootMenuHooker
                 {
                     case "Escape": targetSendKey = "{ESC}"; break;
                     case "Delete": targetSendKey = "{DEL}"; break;
-                    default: targetSendKey = ""; break;
+
+                    default: targetSendKey = SENDKEY_UNELECTED; break;
                 }
             }
             else
@@ -239,26 +285,11 @@ namespace BootMenuHooker
                     case "F10": targetConsoleKey = ConsoleKey.F10; break;
                     case "F11": targetConsoleKey = ConsoleKey.F11; break;
                     case "F12": targetConsoleKey = ConsoleKey.F12; break;
-                    default: targetConsoleKey = ConsoleKey.NoName; break;
+                    default: targetConsoleKey = CONSOLEKEY_UNSELECTED; break;
                 }
             }
         }
 
-        class TargetWindowCandidate
-        {
-            public int pid;
-            public string name;
-            public string title;
-            public TargetWindowCandidate(int pid, string name, string title)
-            {
-                this.pid = pid;
-                this.name = name;
-                this.title = title;
-            }
-            public string toString()
-            {
-                return title + " (" + name + ") [" + pid + "]";
-            }
-        }
+        #endregion
     }
 }

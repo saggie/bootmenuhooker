@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BootMenuHooker"
         mc:Ignorable="d"
-        Title="BootMenuHooker" Height="260" Width="300">
+        Title="BootMenuHooker" Height="300" Width="320">
     <DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center">
             <Button x:Name="startButton" Content="⏵ Start" Width="100" Margin="5" HorizontalAlignment="Center" Click="startButton_Click"/>
@@ -17,8 +17,10 @@
             <Button x:Name="refreshButton" Content="⟳ Refresh" Margin="182,5,10,0" Click="refreshButton_Click"/>
             <Label x:Name="targetKeyLabel" Content="Target Key:" Margin="0"/>
             <ComboBox x:Name="targetKeySelector" Margin="20,0,10,0" SelectionChanged="targetKeySelector_SelectionChanged" />
-            <CheckBox x:Name="forceForegroundCheckBox" Content="Force Foreground" Margin="5,15,10,0" Checked="forceForegroundCheckBox_Checked" Unchecked="forceForegroundCheckBox_Unchecked" ToolTip="" />
-            <Label x:Name="forceForegroundLabel" Content="(Always enabled when including Control key)" Margin="20,0,0,0"/>
+            <Label x:Name="modeLabel" Content="Mode:"/>
+            <RadioButton x:Name="backgroundRadioButton" Content="Background Mode" Margin="20,0,0,0" GroupName="modeGroup" IsChecked="True" Checked="backgroundRadioButton_Checked"/>
+            <RadioButton x:Name="foregroundRadioButton" Content="Foreground Mode" Margin="20,0,0,0" GroupName="modeGroup" Checked="foregroundRadioButton_Checked"/>
+            <TextBlock x:Name="forceForegroundNote" TextWrapping="Wrap" Text="⚠ Note: When including Control key, Foreground mode is forcibly applied." Height="32" Margin="20,5,0,0"/>
         </StackPanel>
     </DockPanel>
 </Window>
